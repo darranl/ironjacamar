@@ -59,6 +59,10 @@ import javax.resource.spi.ValidatingManagedConnectionFactory;
 import javax.resource.spi.security.PasswordCredential;
 import javax.security.auth.Subject;
 
+import org.ietf.jgss.GSSCredential;
+import org.ietf.jgss.GSSException;
+import org.ietf.jgss.GSSName;
+import org.ietf.jgss.Oid;
 import org.jboss.logging.Logger;
 
 /**
@@ -1214,10 +1218,10 @@ public abstract class BaseWrapperManagedConnectionFactory
        */
       private Boolean doCheck()
       {
-         Set<PasswordCredential> creds = subject.getPrivateCredentials(PasswordCredential.class);
-         if (creds != null && creds.size() > 0)
+         Set<PasswordCredential> pcCreds = subject.getPrivateCredentials(PasswordCredential.class);
+         if (pcCreds != null && pcCreds.size() > 0)
          {
-            for (PasswordCredential cred : creds)
+            for (PasswordCredential cred : pcCreds)
             {
                if (cred.getManagedConnectionFactory().equals(mcf))
                {
@@ -1252,6 +1256,50 @@ public abstract class BaseWrapperManagedConnectionFactory
                }
             }
          }
+
+         Set<GSSCredential> gssCreds = subject.getPrivateCredentials(GSSCredential.class);
+         if (gssCreds != null && gssCreds.size() > 0)
+         {
+            for (GSSCredential cred : gssCreds)
+            {
+               String user = null;
+               String pass = null;
+
+               if (cri != null)
+               {
+                  WrappedConnectionRequestInfo lcri = (WrappedConnectionRequestInfo)cri;
+                  user = lcri.getUserName();
+                  pass = lcri.getPassword();
+               }
+               else
+               {
+                  try
+                  {
+                     Oid krb5 = new Oid("1.2.840.113554.1.2.2");
+                     GSSName gssName = cred.getName(krb5);
+                     user = gssName.toString();
+                  }
+                  catch (GSSException ge)
+                  {
+                     // Nothing we can do
+                  }
+               }
+
+               if (userName != null)
+               {
+                  user = userName;
+
+                  if (password != null)
+                     pass = password;
+               }
+
+               props.setProperty("user", (user == null) ? "" : user);
+               props.setProperty("password", (pass == null) ? "" : pass);
+               
+               return Boolean.TRUE;
+            }
+         }
+
          return Boolean.FALSE;
       }
 
