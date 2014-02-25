@@ -58,6 +58,7 @@ import javax.resource.spi.ManagedConnectionFactory;
 import javax.resource.spi.ValidatingManagedConnectionFactory;
 import javax.resource.spi.security.PasswordCredential;
 import javax.security.auth.Subject;
+import javax.security.auth.kerberos.KerberosTicket;
 
 import org.ietf.jgss.GSSCredential;
 import org.ietf.jgss.GSSException;
@@ -1256,47 +1257,10 @@ public abstract class BaseWrapperManagedConnectionFactory
             }
          }
 
-         Set<GSSCredential> gssCreds = subject.getPrivateCredentials(GSSCredential.class);
-         if (gssCreds != null && gssCreds.size() > 0)
-         {
-            for (GSSCredential cred : gssCreds)
-            {
-               String user = null;
-               String pass = null;
-
-               if (cri != null)
-               {
-                  WrappedConnectionRequestInfo lcri = (WrappedConnectionRequestInfo)cri;
-                  user = lcri.getUserName();
-                  pass = lcri.getPassword();
-               }
-               else
-               {
-                  try
-                  {
-                     Oid krb5 = new Oid("1.2.840.113554.1.2.2");
-                     GSSName gssName = cred.getName(krb5);
-                     user = gssName.toString();
-                  }
-                  catch (GSSException ge)
-                  {
-                     // Nothing we can do
-                  }
-               }
-
-               if (userName != null)
-               {
-                  user = userName;
-
-                  if (password != null)
-                     pass = password;
-               }
-
-               props.setProperty("user", (user == null) ? "" : user);
-               props.setProperty("password", (pass == null) ? "" : pass);
-               
-               return Boolean.TRUE;
-            }
+         Set<KerberosTicket> kerberosTickets = subject.getPrivateCredentials(KerberosTicket.class);
+         if (kerberosTickets != null && kerberosTickets.size() > 0)
+         {              
+            return Boolean.TRUE;          
          }
 
          return Boolean.FALSE;
