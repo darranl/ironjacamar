@@ -957,7 +957,7 @@ public abstract class BaseWrapperManagedConnectionFactory
 
       if (subject != null)
       {
-         if (SubjectActions.addMatchingProperties(subject, cri, props, userName, password, this))
+         if (SubjectActions.addMatchingProperties(subject, cri, props, userName, password, this, getLogger()))
             return props;
 
          throw new ResourceException("No matching credentials in Subject!");
@@ -1175,6 +1175,11 @@ public abstract class BaseWrapperManagedConnectionFactory
       return false;
    }
 
+   Logger getLogger()
+   {
+      return log;
+   }
+
    /**
     * SubjectActions
     */
@@ -1192,6 +1197,8 @@ public abstract class BaseWrapperManagedConnectionFactory
 
       private final ManagedConnectionFactory mcf;
 
+      private final Logger log;
+
       /**
        * Constructor
        * @param subject The subject
@@ -1200,9 +1207,11 @@ public abstract class BaseWrapperManagedConnectionFactory
        * @param userName The user name
        * @param password The password
        * @param mcf The managed connection factory
+       * @param log The logger
        */
       SubjectActions(Subject subject, ConnectionRequestInfo cri, Properties props,
-                     String userName, String password, ManagedConnectionFactory mcf)
+                     String userName, String password, ManagedConnectionFactory mcf,
+                     Logger log)
       {
          this.subject = subject;
          this.cri = cri;
@@ -1210,6 +1219,14 @@ public abstract class BaseWrapperManagedConnectionFactory
          this.userName = userName;
          this.password = password;
          this.mcf = mcf;
+         this.log = log;
+
+         log.infof("Subject: %s", subject);
+         log.infof("CRI: %s", cri);
+         log.infof("Props: %s", props);
+         log.infof("UserName: %s", userName);
+         log.infof("Password: %s", password);
+         log.infof("MCF: %s", mcf);
       }
 
       /**
@@ -1225,6 +1242,8 @@ public abstract class BaseWrapperManagedConnectionFactory
             {
                if (cred.getManagedConnectionFactory().equals(mcf))
                {
+                  log.infof("PasswordCredential: %s", cred);
+
                   String user = null;
                   String pass = null;
 
@@ -1256,12 +1275,18 @@ public abstract class BaseWrapperManagedConnectionFactory
                }
             }
          }
+         else
+         {
+            log.infof("PasswordCredential: None");
+         }
 
          Set<GSSCredential> gssCreds = subject.getPrivateCredentials(GSSCredential.class);
          if (gssCreds != null && gssCreds.size() > 0)
          {
             for (GSSCredential cred : gssCreds)
             {
+               log.infof("GSSCredential: %s", cred);
+
                String user = null;
                String pass = null;
 
@@ -1299,6 +1324,10 @@ public abstract class BaseWrapperManagedConnectionFactory
                return Boolean.TRUE;
             }
          }
+         else
+         {
+            log.infof("GSSCredential: None");
+         }
 
          return Boolean.FALSE;
       }
@@ -1323,9 +1352,10 @@ public abstract class BaseWrapperManagedConnectionFactory
        * @return The result
        */
       static boolean addMatchingProperties(Subject subject, ConnectionRequestInfo cri, Properties props,
-                                           String userName, String password, ManagedConnectionFactory mcf)
+                                           String userName, String password, ManagedConnectionFactory mcf,
+                                           Logger log)
       {
-         SubjectActions action = new SubjectActions(subject, cri, props, userName, password, mcf);
+         SubjectActions action = new SubjectActions(subject, cri, props, userName, password, mcf, log);
          Boolean matched = Boolean.FALSE;
          if (System.getSecurityManager() == null)
          {
