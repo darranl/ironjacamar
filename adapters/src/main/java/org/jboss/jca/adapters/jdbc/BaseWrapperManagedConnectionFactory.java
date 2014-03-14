@@ -955,15 +955,15 @@ public abstract class BaseWrapperManagedConnectionFactory
       if (connectionProps != null && connectionProps.size() > 0)
          props.putAll(connectionProps);
 
+      WrappedConnectionRequestInfo lcri = (WrappedConnectionRequestInfo)cri;
+
       if (subject != null)
       {
-         if (SubjectActions.addMatchingProperties(subject, cri, props, userName, password, this, getLogger()))
+         if (SubjectActions.addMatchingProperties(subject, lcri, props, userName, password, this, getLogger()))
             return props;
 
          throw new ResourceException("No matching credentials in Subject!");
       }
-
-      WrappedConnectionRequestInfo lcri = (WrappedConnectionRequestInfo)cri;
 
       if (lcri != null)
       {
@@ -1187,7 +1187,7 @@ public abstract class BaseWrapperManagedConnectionFactory
    {
       private final Subject subject;
 
-      private final ConnectionRequestInfo cri;
+      private final WrappedConnectionRequestInfo cri;
 
       private final Properties props;
 
@@ -1209,7 +1209,7 @@ public abstract class BaseWrapperManagedConnectionFactory
        * @param mcf The managed connection factory
        * @param log The logger
        */
-      SubjectActions(Subject subject, ConnectionRequestInfo cri, Properties props,
+      SubjectActions(Subject subject, WrappedConnectionRequestInfo cri, Properties props,
                      String userName, String password, ManagedConnectionFactory mcf,
                      Logger log)
       {
@@ -1249,9 +1249,8 @@ public abstract class BaseWrapperManagedConnectionFactory
 
                   if (cri != null)
                   {
-                     WrappedConnectionRequestInfo lcri = (WrappedConnectionRequestInfo)cri;
-                     user = lcri.getUserName();
-                     pass = lcri.getPassword();
+                     user = cri.getUserName();
+                     pass = cri.getPassword();
                   }
                   else
                   {
@@ -1283,6 +1282,7 @@ public abstract class BaseWrapperManagedConnectionFactory
          Set<GSSCredential> gssCreds = subject.getPrivateCredentials(GSSCredential.class);
          if (gssCreds != null && gssCreds.size() > 0)
          {
+            boolean done = false;
             for (GSSCredential cred : gssCreds)
             {
                log.infof("GSSCredential: %s", cred);
@@ -1292,9 +1292,9 @@ public abstract class BaseWrapperManagedConnectionFactory
 
                if (cri != null)
                {
-                  WrappedConnectionRequestInfo lcri = (WrappedConnectionRequestInfo)cri;
-                  user = lcri.getUserName();
-                  pass = lcri.getPassword();
+                  user = cri.getUserName();
+                  pass = cri.getPassword();
+                  done = true;
                }
                else
                {
@@ -1303,6 +1303,7 @@ public abstract class BaseWrapperManagedConnectionFactory
                      Oid krb5 = new Oid("1.2.840.113554.1.2.2");
                      GSSName gssName = cred.getName(krb5);
                      user = gssName.toString();
+                     done = true;
                   }
                   catch (GSSException ge)
                   {
@@ -1310,18 +1311,21 @@ public abstract class BaseWrapperManagedConnectionFactory
                   }
                }
 
-               if (userName != null)
+               if (done)
                {
-                  user = userName;
+                  if (userName != null)
+                  {
+                     user = userName;
 
-                  if (password != null)
-                     pass = password;
-               }
+                     if (password != null)
+                        pass = password;
+                  }
 
-               props.setProperty("user", (user == null) ? "" : user);
-               props.setProperty("password", (pass == null) ? "" : pass);
+                  props.setProperty("user", (user == null) ? "" : user);
+                  props.setProperty("password", (pass == null) ? "" : pass);
                
-               return Boolean.TRUE;
+                  return Boolean.TRUE;
+               }
             }
          }
          else
@@ -1351,7 +1355,7 @@ public abstract class BaseWrapperManagedConnectionFactory
        * @param mcf The managed connection factory
        * @return The result
        */
-      static boolean addMatchingProperties(Subject subject, ConnectionRequestInfo cri, Properties props,
+      static boolean addMatchingProperties(Subject subject, WrappedConnectionRequestInfo cri, Properties props,
                                            String userName, String password, ManagedConnectionFactory mcf,
                                            Logger log)
       {
