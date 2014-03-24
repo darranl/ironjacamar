@@ -293,6 +293,8 @@ public class LocalManagedConnectionFactory extends BaseWrapperManagedConnectionF
          {
             String url = getConnectionURL();
             Driver d = getDriver(url);
+            copy.remove("user");            
+            copy.remove("password");
             con = d.connect(url, copy);
             if (con == null)
                throw new ResourceException("Wrong driver class [" + d.getClass() + "] for this connection URL [" +
