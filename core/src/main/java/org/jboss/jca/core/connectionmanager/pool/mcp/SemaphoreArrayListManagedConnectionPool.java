@@ -39,10 +39,13 @@ import org.jboss.jca.core.connectionmanager.pool.idle.IdleRemover;
 import org.jboss.jca.core.connectionmanager.pool.validator.ConnectionValidator;
 import org.jboss.jca.core.tracer.Tracer;
 
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.Set;
+import java.util.StringTokenizer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
@@ -54,6 +57,7 @@ import javax.resource.spi.ManagedConnection;
 import javax.resource.spi.ManagedConnectionFactory;
 import javax.resource.spi.RetryableException;
 import javax.resource.spi.ValidatingManagedConnectionFactory;
+import javax.resource.spi.security.PasswordCredential;
 import javax.security.auth.Subject;
 
 import org.jboss.logging.Messages;
@@ -88,6 +92,9 @@ public class SemaphoreArrayListManagedConnectionPool implements ManagedConnectio
 
    /** The default subject */
    private Subject defaultSubject;
+
+   /** Disable subject cache */
+   private boolean disableSubjectCache;
 
    /** The default connection request information */
    private ConnectionRequestInfo defaultCri;
@@ -155,6 +162,7 @@ public class SemaphoreArrayListManagedConnectionPool implements ManagedConnectio
       this.mcf = mcf;
       this.cm = cm;
       this.defaultSubject = subject;
+      this.disableSubjectCache = false;
       this.defaultCri = cri;
       this.poolConfiguration = pc;
       this.maxSize = pc.getMaxSize();
@@ -167,6 +175,27 @@ public class SemaphoreArrayListManagedConnectionPool implements ManagedConnectio
       this.supportsLazyAssociation = null;
       this.lastIdleCheck = System.currentTimeMillis();
       this.lastUsed = Long.MAX_VALUE;
+
+
+      String dsc = SecurityActions.getSystemProperty("ironjacamar.disable_subject_cache");
+      if (dsc != null)
+      {
+         try
+         {
+            Boolean b = Boolean.valueOf(dsc);
+            disableSubjectCache = b.booleanValue();
+         }
+         catch (Exception e)
+         {
+            StringTokenizer st = new StringTokenizer(dsc, ",");
+            while (st.hasMoreTokens())
+            {
+               String name = st.nextToken();
+               if (pool.getName().equals(name))
+                  disableSubjectCache = true;
+            }
+         }
+      }
 
       // Schedule managed connection pool for prefill
       if ((pc.isPrefill() || pc.isStrictMin()) && p instanceof PrefillPool && pc.getInitialSize() > 0)
@@ -287,7 +316,7 @@ public class SemaphoreArrayListManagedConnectionPool implements ManagedConnectio
                                                         pool.getInternalStatistics().getInUseCount(), maxSize));
       }
 
-      subject = (subject == null) ? defaultSubject : subject;
+      subject = (subject == null) ? getSubject() : subject;
       cri = (cri == null) ? defaultCri : cri;
 
       if (pool.isFull())
@@ -1123,7 +1152,7 @@ public class SemaphoreArrayListManagedConnectionPool implements ManagedConnectio
                   // Create a connection to fill the pool
                   try
                   {
-                     ConnectionListener cl = createConnectionEventListener(defaultSubject, defaultCri);
+                     ConnectionListener cl = createConnectionEventListener(getSubject(), defaultCri);
 
                      if (Tracer.isEnabled())
                         Tracer.createConnectionListener(pool.getName(), this, cl, cl.getManagedConnection(),
@@ -1639,6 +1668,52 @@ public class SemaphoreArrayListManagedConnectionPool implements ManagedConnectio
       return false;
    }
 
+   /**
+    * Get the Subject
+    * @return The instance
+    */
+   private Subject getSubject()
+   {
+      if (!disableSubjectCache)
+      {
+         return defaultSubject;
+      }
+      else
+      {
+         return AccessController.doPrivileged(new PrivilegedAction<Subject>() 
+         {
+            public Subject run()
+            {
+               try
+               {
+                  Subject subject = cm.getSubjectFactory().createSubject(cm.getSecurityDomain());
+
+                  Set<PasswordCredential> pcs = subject.getPrivateCredentials(PasswordCredential.class);
+                  if (pcs.size() > 0)
+                  {
+                     for (PasswordCredential pc : pcs)
+                     {
+                        pc.setManagedConnectionFactory(mcf);
+                     }
+                  }
+
+                  if (log.isDebugEnabled())
+                     log.debug("Subject=" + subject);
+                  
+                  return subject;
+               }
+               catch (Throwable t)
+               {
+                  log.exceptionDuringCreateSubject(t.getMessage(), t);
+               }
+
+               return null;
+            }
+         });
+      }
+   }
+
+   
    /**
     * String representation
     * @return The string
