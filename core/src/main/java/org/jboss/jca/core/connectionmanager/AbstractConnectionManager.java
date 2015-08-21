@@ -33,6 +33,11 @@ import org.jboss.jca.core.spi.graceful.GracefulCallback;
 import org.jboss.jca.core.spi.security.SubjectFactory;
 import org.jboss.jca.core.spi.transaction.TransactionIntegration;
 
+import java.security.AccessControlContext;
+import java.security.AccessController;
+import java.security.DomainCombiner;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
 import java.util.Collection;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -48,6 +53,7 @@ import javax.resource.spi.ManagedConnectionFactory;
 import javax.resource.spi.RetryableException;
 import javax.resource.spi.security.PasswordCredential;
 import javax.security.auth.Subject;
+import javax.security.auth.SubjectDomainCombiner;
 import javax.transaction.SystemException;
 import javax.transaction.Transaction;
 
@@ -66,10 +72,10 @@ public abstract class AbstractConnectionManager implements ConnectionManager
 
    /** Log trace */
    protected boolean trace;
-   
+
    /** The bundle */
    private static CoreBundle bundle = Messages.getBundle(CoreBundle.class);
-   
+
    /** The pool */
    private Pool pool;
 
@@ -149,7 +155,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
     * Get the pool.
     * @return the pool
     */
-   public Pool getPool()
+   @Override
+public Pool getPool()
    {
       return pool;
    }
@@ -167,7 +174,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
     * Gets cached connection manager.
     * @return cached connection manager
     */
-   public CachedConnectionManager getCachedConnectionManager()
+   @Override
+public CachedConnectionManager getCachedConnectionManager()
    {
       return cachedConnectionManager;
    }
@@ -175,7 +183,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public boolean cancelShutdown()
+   @Override
+public boolean cancelShutdown()
    {
       if (scheduledGraceful != null)
       {
@@ -222,7 +231,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public void prepareShutdown()
+   @Override
+public void prepareShutdown()
    {
       prepareShutdown(0, null);
    }
@@ -230,7 +240,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public void prepareShutdown(GracefulCallback cb)
+   @Override
+public void prepareShutdown(GracefulCallback cb)
    {
       prepareShutdown(0, cb);
    }
@@ -238,7 +249,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public void prepareShutdown(int seconds)
+   @Override
+public void prepareShutdown(int seconds)
    {
       prepareShutdown(seconds, null);
    }
@@ -246,11 +258,12 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public void prepareShutdown(int seconds, GracefulCallback cb)
+   @Override
+public void prepareShutdown(int seconds, GracefulCallback cb)
    {
       shutdown.set(true);
 
-      if (gracefulCallback == null) 
+      if (gracefulCallback == null)
          gracefulCallback = cb;
 
       if (pool != null)
@@ -277,7 +290,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public synchronized void shutdown()
+   @Override
+public synchronized void shutdown()
    {
       getLogger().debugf("%s: shutdown", jndiName);
       shutdown.set(true);
@@ -305,7 +319,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public boolean isShutdown()
+   @Override
+public boolean isShutdown()
    {
       return shutdown.get();
    }
@@ -313,14 +328,15 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public int getDelay()
+   @Override
+public int getDelay()
    {
       if (scheduledGraceful != null)
          return (int)scheduledGraceful.getDelay(TimeUnit.SECONDS);
 
       if (shutdown.get())
          return Integer.MIN_VALUE;
-      
+
       return Integer.MAX_VALUE;
    }
 
@@ -328,7 +344,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
     * Gets jndi name.
     * @return jndi name
     */
-   public String getJndiName()
+   @Override
+public String getJndiName()
    {
       return jndiName;
    }
@@ -337,7 +354,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
     * Sets jndi name.
     * @param jndiName jndi name
     */
-   public void setJndiName(String jndiName)
+   @Override
+public void setJndiName(String jndiName)
    {
       this.jndiName = jndiName;
    }
@@ -346,7 +364,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
     * Is sharable
     * @return The value
     */
-   public boolean isSharable()
+   @Override
+public boolean isSharable()
    {
       return sharable;
    }
@@ -367,7 +386,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
     * Is enlistment
     * @return The value
     */
-   public boolean isEnlistment()
+   @Override
+public boolean isEnlistment()
    {
       return enlistment;
    }
@@ -429,7 +449,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public String getSecurityDomain()
+   @Override
+public String getSecurityDomain()
    {
       return securityDomain;
    }
@@ -446,7 +467,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public SubjectFactory getSubjectFactory()
+   @Override
+public SubjectFactory getSubjectFactory()
    {
       return subjectFactory;
    }
@@ -514,7 +536,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
     * Get the number of allocation retries
     * @return The number of retries
     */
-   public int getAllocationRetry()
+   @Override
+public int getAllocationRetry()
    {
       return allocationRetry;
    }
@@ -533,7 +556,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
     * Get the wait time between each allocation retry
     * @return The millis
     */
-   public long getAllocationRetryWaitMillis()
+   @Override
+public long getAllocationRetryWaitMillis()
    {
       return allocationRetryWaitMillis;
    }
@@ -636,7 +660,7 @@ public abstract class AbstractConnectionManager implements ConnectionManager
          if (isInterrupted || innerIsInterrupted)
          {
             Thread.currentThread().interrupt();
-      
+
             if (innerIsInterrupted)
                throw new ResourceException(bundle.getManagedConnectionRetryWaitInterrupted(jndiName), failure);
          }
@@ -651,7 +675,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
     * @param bcl connection listener that wraps connection
     * @param kill kill connection or not
     */
-   public void returnManagedConnection(org.jboss.jca.core.api.connectionmanager.listener.ConnectionListener bcl,
+   @Override
+public void returnManagedConnection(org.jboss.jca.core.api.connectionmanager.listener.ConnectionListener bcl,
                                        boolean kill)
    {
       // Hack - We know that we can type cast it
@@ -717,7 +742,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public Object allocateConnection(ManagedConnectionFactory mcf, ConnectionRequestInfo cri) throws ResourceException
+   @Override
+public Object allocateConnection(ManagedConnectionFactory mcf, ConnectionRequestInfo cri) throws ResourceException
    {
       //Check for pooling!
       if (pool == null || shutdown.get())
@@ -733,8 +759,24 @@ public abstract class AbstractConnectionManager implements ConnectionManager
       }
 
       // Pick a managed connection from the pool
-      Subject subject = getSubject();
-      ConnectionListener cl = getManagedConnection(subject, cri);
+        DomainCombiner domainCombiner = new OnDemandSubjectDomainCombiner(getSubject());
+        AccessControlContext accessControlContext = new AccessControlContext(AccessController.getContext(), domainCombiner);
+
+        ConnectionListener cl;
+        try {
+            cl = AccessController.doPrivileged(new PrivilegedExceptionAction<ConnectionListener>() {
+
+                @Override
+                public ConnectionListener run() throws Exception {
+                    return getManagedConnection(null, cri);
+                }
+            }, accessControlContext);
+        } catch (PrivilegedActionException e) {
+            if (e.getCause() instanceof ResourceException) {
+                throw (ResourceException) e.getCause();
+            }
+            throw new RuntimeException(e);
+        }
 
       // Tell each connection manager the managed connection is active
       reconnectManagedConnection(cl);
@@ -743,8 +785,14 @@ public abstract class AbstractConnectionManager implements ConnectionManager
       Object connection = null;
       try
       {
-         connection = cl.getManagedConnection().getConnection(subject, cri);
-      }
+            connection = AccessController.doPrivileged(new PrivilegedExceptionAction<Object>() {
+
+                @Override
+                public Object run() throws Exception {
+                    return cl.getManagedConnection().getConnection(null, cri);
+                }
+            }, accessControlContext);
+        }
       catch (Throwable t)
       {
          try
@@ -771,10 +819,38 @@ public abstract class AbstractConnectionManager implements ConnectionManager
       return connection;
    }
 
+    private class OnDemandSubjectDomainCombiner extends SubjectDomainCombiner {
+
+        private volatile Subject subject;
+
+        /**
+         * @param subject
+         */
+        public OnDemandSubjectDomainCombiner(Subject subject) {
+            super(subject);
+            this.subject = subject;
+        }
+
+        @Override
+        public synchronized Subject getSubject() {
+            if (subject != null) {
+                try {
+                    return subject;
+                } finally {
+                    subject = null;
+                }
+            }
+
+            return AbstractConnectionManager.this.getSubject();
+        }
+
+    }
+
    /**
     * {@inheritDoc}
     */
-   public void associateConnection(Object connection, ManagedConnectionFactory mcf, ConnectionRequestInfo cri)
+   @Override
+public void associateConnection(Object connection, ManagedConnectionFactory mcf, ConnectionRequestInfo cri)
       throws ResourceException
    {
       associateManagedConnection(connection, mcf, cri);
@@ -783,7 +859,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public ManagedConnection associateManagedConnection(Object connection, ManagedConnectionFactory mcf,
+   @Override
+public ManagedConnection associateManagedConnection(Object connection, ManagedConnectionFactory mcf,
                                                        ConnectionRequestInfo cri)
       throws ResourceException
    {
@@ -821,11 +898,12 @@ public abstract class AbstractConnectionManager implements ConnectionManager
 
       return cl.getManagedConnection();
    }
- 
+
    /**
     * {@inheritDoc}
     */
-   public boolean dissociateManagedConnection(Object connection, ManagedConnection mc, ManagedConnectionFactory mcf)
+   @Override
+public boolean dissociateManagedConnection(Object connection, ManagedConnection mc, ManagedConnectionFactory mcf)
       throws ResourceException
    {
       if (connection == null || mc == null || mcf == null)
@@ -883,7 +961,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public void inactiveConnectionClosed(Object connection, ManagedConnectionFactory mcf)
+   @Override
+public void inactiveConnectionClosed(Object connection, ManagedConnectionFactory mcf)
    {
       // We don't track inactive connections
    }
@@ -896,7 +975,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    //does NOT put the mc back in the pool if no more handles. Doing so would introduce a race condition
    //whereby the mc got back in the pool while still enlisted in the tx.
    //The mc could be checked out again and used before the delist occured.
-   public void unregisterAssociation(ConnectionListener cl, Object c)
+   @Override
+public void unregisterAssociation(ConnectionListener cl, Object c)
    {
       cl.unregisterConnection(c);
    }
@@ -904,7 +984,8 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public void lazyEnlist(ManagedConnection mc) throws ResourceException
+   @Override
+public void lazyEnlist(ManagedConnection mc) throws ResourceException
    {
       // Nothing by default
    }
@@ -987,17 +1068,20 @@ public abstract class AbstractConnectionManager implements ConnectionManager
    /**
     * {@inheritDoc}
     */
-   public abstract void transactionStarted(Collection<ConnectionRecord> conns) throws SystemException;
+   @Override
+public abstract void transactionStarted(Collection<ConnectionRecord> conns) throws SystemException;
 
    /**
     * {@inheritDoc}
     */
-   public abstract boolean isTransactional();
+   @Override
+public abstract boolean isTransactional();
 
    /**
     * {@inheritDoc}
     */
-   public abstract TransactionIntegration getTransactionIntegration();
+   @Override
+public abstract TransactionIntegration getTransactionIntegration();
 
    /**
     * Get a subject
