@@ -22,6 +22,10 @@
 
 package org.jboss.jca.core.connectionmanager;
 
+import org.ietf.jgss.GSSCredential;
+import org.ietf.jgss.GSSException;
+import org.ietf.jgss.GSSName;
+import org.ietf.jgss.Oid;
 import org.jboss.jca.common.api.metadata.common.FlushStrategy;
 import org.jboss.jca.core.CoreBundle;
 import org.jboss.jca.core.CoreLogger;
@@ -39,6 +43,7 @@ import java.security.DomainCombiner;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -832,7 +837,75 @@ public Object allocateConnection(ManagedConnectionFactory mcf, ConnectionRequest
         }
 
         @Override
-        public synchronized Subject getSubject() {
+        public Subject getSubject() {
+
+            Set<Object> privateCredentials = new HashSet<Object>();
+            for (Object current : this.subject.getPrivateCredentials()) {
+                if (current instanceof GSSCredential) {
+                    final GSSCredential currentCredential = (GSSCredential) current;
+                    privateCredentials.add(new GSSCredential() {
+
+                        @Override
+                        public int getUsage(Oid mech) throws GSSException {
+                            return currentCredential.getUsage(mech);
+                        }
+
+                        @Override
+                        public int getUsage() throws GSSException {
+                            return currentCredential.getUsage();
+                        }
+
+                        @Override
+                        public int getRemainingLifetime() throws GSSException {
+                            return currentCredential.getRemainingLifetime();
+                        }
+
+                        @Override
+                        public int getRemainingInitLifetime(Oid mech) throws GSSException {
+                            return currentCredential.getRemainingInitLifetime(mech);
+                        }
+
+                        @Override
+                        public int getRemainingAcceptLifetime(Oid mech) throws GSSException {
+                            return currentCredential.getRemainingAcceptLifetime(mech);
+                        }
+
+                        @Override
+                        public GSSName getName(Oid mech) throws GSSException {
+                            return currentCredential.getName(mech);
+                        }
+
+                        @Override
+                        public GSSName getName() throws GSSException {
+                            return currentCredential.getName();
+                        }
+
+                        @Override
+                        public Oid[] getMechs() throws GSSException {
+                            return currentCredential.getMechs();
+                        }
+
+                        @Override
+                        public void dispose() throws GSSException {
+                            new Throwable("Don't kill me").printStackTrace();
+                        }
+
+                        @Override
+                        public void add(GSSName name, int initLifetime, int acceptLifetime, Oid mech, int usage) throws GSSException {
+                            currentCredential.add(name, initLifetime, acceptLifetime, mech, usage);
+                        }
+                    });
+                } else {
+                    privateCredentials.add(current);
+                }
+            }
+
+            return new Subject(false, this.subject.getPrincipals(), this.subject.getPublicCredentials(), privateCredentials);
+        }
+
+
+
+        public synchronized Subject getSubjectX() {
             if (subject != null) {
                 try {
                     return subject;
